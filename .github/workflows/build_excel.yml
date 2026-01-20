@@ -28,4 +28,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cotizacion-excel
-          path: dist/Cotizacion_Antartida.xlsx
+          path: dist/*.xlsx
