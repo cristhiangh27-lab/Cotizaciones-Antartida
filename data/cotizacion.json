@@ -1,0 +1,19 @@
+{
+  "proyecto": {
+    "nombre_hoja": "ENE-PCC-CP-2026-01",
+    "cliente": "Nombre cliente",
+    "direccion": "Dirección completa",
+    "telefono": "Teléfono",
+    "fecha": "2026-01-20",
+    "validez_dias": 30,
+    "empresa": "Grupo Antartida Ingenieria"
+  },
+  "conceptos": [
+    {
+      "descripcion": "Texto del concepto (puede ser multi-línea)",
+      "unidad": 1,
+      "cantidad": 1,
+      "precio_unitario": 0
+    }
+  ]
+}
