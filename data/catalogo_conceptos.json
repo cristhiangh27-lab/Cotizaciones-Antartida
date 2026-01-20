@@ -1,16 +1,13 @@
 {
-  "moneda": "MXN",
-  "notas": "Ejemplo base de catálogo. Ajusta los conceptos o agrega nuevos elementos en el arreglo 'conceptos'.",
   "conceptos": [
     {
       "partida": 1,
       "clave": "ANT-001",
       "concepto": "Suministro e instalación",
-      "descripcion": "Instalación de sistema fotovoltaico básico con puesta en marcha.",
+      "descripcion": "Instalación de sistema fotovoltaico básico.",
       "unidad": "servicio",
       "cantidad": 1,
-      "precio_unitario": 25000.0,
-      "importe": 25000.0
+      "precio_unitario": 25000.0
     },
     {
       "partida": 2,
@@ -19,8 +16,7 @@
       "descripcion": "Visita de mantenimiento y revisión de componentes.",
       "unidad": "visita",
       "cantidad": 2,
-      "precio_unitario": 1800.0,
-      "importe": 3600.0
+      "precio_unitario": 1800.0
     }
   ]
 }
