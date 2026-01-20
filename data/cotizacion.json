@@ -1,19 +1,17 @@
 {
   "proyecto": {
-    "nombre_hoja": "ENE-PCC-CP-2026-01",
-    "cliente": "Nombre cliente",
-    "direccion": "Dirección completa",
-    "telefono": "Teléfono",
-    "fecha": "2026-01-20",
-    "validez_dias": 30,
-    "empresa": "Grupo Antartida Ingenieria"
+    "folio": "ENE-PCC-CP-2026-01",
+    "cliente": "Isela Ivonne Aguirre Ortiz",
+    "direccion": "Cerrada Primaveras, Mz 25, Lote 23, Paraíso Country Club, Morelos",
+    "telefono": "55 2527 8919",
+    "fecha": "2026-01-10",
+    "validez_dias": 30
   },
   "conceptos": [
     {
-      "descripcion": "Texto del concepto (puede ser multi-línea)",
-      "unidad": 1,
-      "cantidad": 1,
-      "precio_unitario": 0
+      "descripcion": "Servicio General de mantenimiento a alberca...",
+      "unidades": 1,
+      "precio_unitario": 75000
     }
   ]
 }

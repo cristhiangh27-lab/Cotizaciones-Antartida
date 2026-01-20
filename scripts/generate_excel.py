@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import json
-import unicodedata
 from pathlib import Path
-from typing import Iterable, Optional, Tuple
+from typing import Dict, Iterable, Optional, Tuple
 
 from openpyxl import load_workbook
 from openpyxl.cell import Cell
@@ -14,19 +13,16 @@ from copy import copy
 
 TEMPLATE_PATH = Path("templates/Formato de cotizaciones Antartida y Altavolt.xlsx")
 DATA_PATH = Path("data/cotizacion.json")
-OUTPUT_PATH = Path("dist/Cotizacion_Generada.xlsx")
 TEMPLATE_SHEET_NAME = "Lomas Country Temixco"
 
-HEADER_ANCHORS = {
-    "cliente": ("cliente",),
-    "direccion": ("direccion", "dirección"),
-    "telefono": ("telefono", "teléfono"),
-    "fecha": ("fecha del presupuesto", "fecha"),
-    "validez_dias": ("validez",),
+HEADER_LABELS = {
+    "cliente": "Cliente:",
+    "direccion": "Dirección:",
+    "telefono": "Teléfono:",
+    "fecha": "Fecha del presupuesto",
 }
 
-TABLE_ANCHORS = ("descripcion", "descripción")
-TABLE_FIELDS = ("unidad", "cantidad", "precio", "total")
+TABLE_HEADER_LABEL = "DESCRIPCIÓN"
 
 
 def load_payload() -> dict:
@@ -34,57 +30,49 @@ def load_payload() -> dict:
         return json.load(file)
 
 
-def normalize(value: str) -> str:
-    normalized = unicodedata.normalize("NFKD", value)
-    without_accents = "".join(char for char in normalized if not unicodedata.combining(char))
-    return " ".join(without_accents.lower().strip().split())
-
-
-def find_anchor_cell(sheet: Worksheet, anchors: Iterable[str]) -> Optional[Cell]:
-    normalized_anchors = {normalize(anchor) for anchor in anchors}
+def find_cell_with_text(sheet: Worksheet, text: str) -> Optional[Cell]:
+    """Locate a cell whose text matches exactly the provided label."""
     for row in sheet.iter_rows():
         for cell in row:
-            if isinstance(cell.value, str):
-                if normalize(cell.value) in normalized_anchors:
-                    return cell
+            if isinstance(cell.value, str) and cell.value.strip() == text:
+                return cell
     return None
 
 
-def write_anchor_value(sheet: Worksheet, anchors: Iterable[str], value: str) -> None:
-    cell = find_anchor_cell(sheet, anchors)
-    if not cell:
-        return
-    target = cell.offset(column=1)
-    if target.value is None or target.value == "":
-        target.value = value
-    else:
-        cell.value = value
-
-
-def find_table_header(sheet: Worksheet) -> Tuple[int, dict]:
+def find_cell_startswith(sheet: Worksheet, prefix: str) -> Optional[Cell]:
+    """Locate a cell whose text starts with the provided prefix."""
     for row in sheet.iter_rows():
-        header_map = {}
+        for cell in row:
+            if isinstance(cell.value, str) and cell.value.strip().startswith(prefix):
+                return cell
+    return None
+
+
+def find_table_header(sheet: Worksheet) -> Tuple[int, Dict[str, int]]:
+    """Find the header row for the concepts table and return column mapping."""
+    for row in sheet.iter_rows():
+        header_map: Dict[str, int] = {}
         for cell in row:
             if not isinstance(cell.value, str):
                 continue
-            normalized = normalize(cell.value)
-            if normalized in TABLE_ANCHORS:
+            label = cell.value.strip().upper()
+            if label == TABLE_HEADER_LABEL:
                 header_map["descripcion"] = cell.column
-            if "unidad" in normalized:
-                header_map["unidad"] = cell.column
-            if "cantidad" in normalized:
-                header_map["cantidad"] = cell.column
-            if "precio" in normalized:
+            if label == "UNIDADES":
+                header_map["unidades"] = cell.column
+            if label == "PRECIO":
                 header_map["precio_unitario"] = cell.column
-            if "total" in normalized:
+            if label == "TOTAL":
                 header_map["total"] = cell.column
-        if "descripcion" in header_map and any(key in header_map for key in TABLE_FIELDS):
+        if "descripcion" in header_map:
             return row[0].row, header_map
     raise ValueError("No se encontró la fila de encabezado de la tabla de conceptos.")
 
 
-def clear_existing_concepts(sheet: Worksheet, start_row: int, columns: Iterable[int]) -> None:
+def clear_existing_concepts(sheet: Worksheet, start_row: int, columns: Iterable[int]) -> int:
+    """Clear only the content of existing concepts without touching styles."""
     row = start_row
+    cleared_rows = 0
     while True:
         values = [sheet.cell(row=row, column=col).value for col in columns]
         if all(value is None for value in values):
@@ -94,9 +82,12 @@ def clear_existing_concepts(sheet: Worksheet, start_row: int, columns: Iterable[
             if cell.data_type != "f":
                 cell.value = None
         row += 1
+        cleared_rows += 1
+    return cleared_rows
 
 
 def copy_row_style(sheet: Worksheet, source_row: int, target_row: int) -> None:
+    """Copy row height and cell styles from the source row."""
     sheet.row_dimensions[target_row].height = sheet.row_dimensions[source_row].height
     for col in range(1, sheet.max_column + 1):
         source_cell = sheet.cell(row=source_row, column=col)
@@ -111,16 +102,18 @@ def copy_row_style(sheet: Worksheet, source_row: int, target_row: int) -> None:
 
 
 def write_concepts(sheet: Worksheet, concepts: Iterable[dict], header_row: int, header_map: dict) -> None:
+    """Write concepts under the table header, inserting rows if needed."""
     data_row = header_row + 1
     target_columns = [header_map[key] for key in header_map]
-    clear_existing_concepts(sheet, data_row, target_columns)
+    cleared_rows = clear_existing_concepts(sheet, data_row, target_columns)
 
     base_row = data_row
     for index, concept in enumerate(concepts):
         row = data_row + index
-        if row > base_row:
+        if index >= cleared_rows:
             sheet.insert_rows(row)
             copy_row_style(sheet, base_row, row)
+
         descripcion_col = header_map["descripcion"]
         descripcion_cell = sheet.cell(row=row, column=descripcion_col)
         descripcion_cell.value = concept.get("descripcion")
@@ -128,19 +121,21 @@ def write_concepts(sheet: Worksheet, concepts: Iterable[dict], header_row: int, 
         alignment.wrap_text = True
         descripcion_cell.alignment = alignment
 
-        for field in ("unidad", "cantidad", "precio_unitario", "total"):
-            if field not in header_map:
-                continue
-            cell = sheet.cell(row=row, column=header_map[field])
-            if field == "total" and cell.data_type == "f":
-                continue
-            if field == "total":
-                cantidad = float(concept.get("cantidad", 0) or 0)
-                precio = float(concept.get("precio_unitario", 0) or 0)
-                cell.value = cantidad * precio
-            else:
-                value = concept.get(field)
-                cell.value = value
+        unidades_col = header_map.get("unidades")
+        precio_col = header_map.get("precio_unitario")
+        total_col = header_map.get("total")
+
+        unidades = concept.get("unidades", 0)
+        precio_unitario = concept.get("precio_unitario", 0)
+
+        if unidades_col:
+            sheet.cell(row=row, column=unidades_col).value = unidades
+        if precio_col:
+            sheet.cell(row=row, column=precio_col).value = precio_unitario
+        if total_col:
+            total_cell = sheet.cell(row=row, column=total_col)
+            if total_cell.data_type != "f":
+                total_cell.value = float(unidades or 0) * float(precio_unitario or 0)
 
 
 def main() -> None:
@@ -159,20 +154,35 @@ def main() -> None:
 
     template_sheet = workbook[TEMPLATE_SHEET_NAME]
     new_sheet = workbook.copy_worksheet(template_sheet)
-    new_sheet.title = proyecto.get("nombre_hoja", "Cotizacion")
-    template_sheet.sheet_state = "hidden"
+    new_sheet.title = proyecto.get("folio", "Cotizacion")
+    workbook.remove(template_sheet)
 
-    write_anchor_value(new_sheet, HEADER_ANCHORS["cliente"], proyecto.get("cliente", ""))
-    write_anchor_value(new_sheet, HEADER_ANCHORS["direccion"], proyecto.get("direccion", ""))
-    write_anchor_value(new_sheet, HEADER_ANCHORS["telefono"], proyecto.get("telefono", ""))
-    write_anchor_value(new_sheet, HEADER_ANCHORS["fecha"], proyecto.get("fecha", ""))
-    write_anchor_value(new_sheet, HEADER_ANCHORS["validez_dias"], str(proyecto.get("validez_dias", "")))
+    cliente_cell = find_cell_with_text(new_sheet, HEADER_LABELS["cliente"])
+    if cliente_cell:
+        cliente_cell.value = f"{HEADER_LABELS['cliente']} {proyecto.get('cliente', '')}"
+
+    direccion_cell = find_cell_with_text(new_sheet, HEADER_LABELS["direccion"])
+    if direccion_cell:
+        direccion_cell.value = f"{HEADER_LABELS['direccion']} {proyecto.get('direccion', '')}"
+
+    telefono_cell = find_cell_with_text(new_sheet, HEADER_LABELS["telefono"])
+    if telefono_cell:
+        telefono_cell.value = f"{HEADER_LABELS['telefono']} {proyecto.get('telefono', '')}"
+
+    fecha_cell = find_cell_with_text(new_sheet, HEADER_LABELS["fecha"])
+    if fecha_cell:
+        fecha_cell.offset(column=1).value = proyecto.get("fecha", "")
+
+    titulo_cell = find_cell_startswith(new_sheet, "Presupuesto")
+    if titulo_cell:
+        titulo_cell.value = f"Presupuesto {proyecto.get('folio', '')}"
 
     header_row, header_map = find_table_header(new_sheet)
     write_concepts(new_sheet, conceptos, header_row, header_map)
 
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    workbook.save(OUTPUT_PATH)
+    output_path = Path(f"dist/Cotizacion_{proyecto.get('folio', 'Generada')}.xlsx")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    workbook.save(output_path)
 
 
 if __name__ == "__main__":
